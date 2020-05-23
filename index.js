@@ -132,16 +132,17 @@ function decodeModule(buffer, offset) {
   const { offset: storageOffset, value: storage } = decodeOption(buffer, nameOffset, decodeStorage);
   const { offset: callsOffset, value: calls } = decodeOption(buffer, storageOffset, decodeCalls);
   const { offset: eventsOffset, value: events } = decodeOption(buffer, callsOffset, decodeEvents);
-  // TODO: constants
+  const { offset: constsOffset, value: constants } = decodeConstants(buffer, eventsOffset);
   // TODO: errors
   const module = {
     name,
     storage,
     calls,
     events,
+    constants,
   };
 
-  return { offset: eventsOffset, value: module };
+  return { offset: constsOffset, value: module };
 }
 
 // https://crates.parity.io/frame_metadata/struct.StorageMetadata.html
@@ -277,4 +278,24 @@ function decodeEvent(buffer, offset) {
   };
 
   return { offset: docOffset, value: event };
+}
+
+function decodeConstants(buffer, offset) {
+  return decodeArray(buffer, offset, decodeConstant);
+}
+
+// https://crates.parity.io/frame_metadata/struct.ModuleConstantMetadata.html
+function decodeConstant(buffer, offset) {
+  const { offset: nameOffset, value: name } = decodeString(buffer, offset);
+  const { offset: typeOffset, value: ty } = decodeString(buffer, nameOffset);
+  const { offset: valueOffset, value } = decodeByteArray(buffer, typeOffset);
+  const { offset: docOffset, value: documentation } = decodeStringArray(buffer, valueOffset);
+  const constant = {
+    name,
+    ty,
+    value,
+    documentation,
+  };
+
+  return { offset: docOffset, value: constant };
 }
