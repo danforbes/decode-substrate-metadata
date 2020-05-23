@@ -56,11 +56,13 @@ async function getMetadata() {
   });
 }
 
+// https://www.substrate.io/kb/advanced/codec#boolean
 function decodeBool(buffer, offset) {
   const val = buffer.readUInt8(offset);
   return { offset: offset + 1, value: val ? true : false };
 }
 
+// https://www.substrate.io/kb/advanced/codec#compactgeneral-integers
 function decodeCompact(buffer, offset) {
   const raw = buffer.readUInt8(offset);
   const flag = raw & 0b11;
@@ -82,12 +84,14 @@ function decodeString(buffer, offset) {
   return { offset: strEnd, value: buffer.toString("utf-8", compactOffset, strEnd) };
 }
 
+// https://www.substrate.io/kb/advanced/codec#vectors-lists-series-sets
 function decodeByteArray(buffer, offset) {
   const { offset: numBytesOffset, value: numBytes } = decodeCompact(buffer, offset);
   const arrEnd = numBytesOffset + numBytes;
   return { offset: arrEnd, value: buffer.slice(numBytesOffset, arrEnd) };
 }
 
+// https://www.substrate.io/kb/advanced/codec#vectors-lists-series-sets
 function decodeArray(buffer, offset, decodeElem) {
   const { offset: numElemOffset, value: numElems } = decodeCompact(buffer, offset);
   let elemOffset = numElemOffset;
@@ -106,6 +110,7 @@ function decodeStringArray(buffer, offset) {
   return decodeArray(buffer, offset, decodeString);
 }
 
+// https://www.substrate.io/kb/advanced/codec#options
 function decodeOption(buffer, offset, decodeOpt) {
   const opt = buffer.readUInt8(offset);
   if (!opt) {
@@ -121,6 +126,7 @@ function decodeModules(buffer, offset) {
   return { offset: moduleOffset, value: [module] };
 }
 
+// https://crates.parity.io/frame_metadata/struct.ModuleMetadata.html
 function decodeModule(buffer, offset) {
   const { offset: nameOffset, value: name } = decodeString(buffer, offset);
   const { offset: storageOffset, value: storage } = decodeOption(buffer, nameOffset, decodeStorage);
@@ -138,6 +144,7 @@ function decodeModule(buffer, offset) {
   return { offset: eventsOffset, value: module };
 }
 
+// https://crates.parity.io/frame_metadata/struct.StorageMetadata.html
 function decodeStorage(buffer, offset) {
   const { offset: prefixOffset, value: prefix } = decodeString(buffer, offset);
   const { offset: entriesOffset, value: entries } = decodeStorageEntries(buffer, prefixOffset);
@@ -145,19 +152,10 @@ function decodeStorage(buffer, offset) {
 }
 
 function decodeStorageEntries(buffer, offset) {
-  const { offset: numEntriesOffset, value: numEntries } = decodeCompact(buffer, offset);
-  let entryOffset = numEntriesOffset;
-  const entries = [];
-
-  for (let idx = 0; idx < numEntries; ++idx) {
-    const { offset, value: entry } = decodeStorageEntry(buffer, entryOffset);
-    entryOffset = offset;
-    entries.push(entry);
-  }
-
-  return { offset: entryOffset, value: entries };
+  return decodeArray(buffer, offset, decodeStorageEntry);
 }
 
+// https://crates.parity.io/frame_metadata/struct.StorageEntryMetadata.html
 function decodeStorageEntry(buffer, offset) {
   const { offset: nameOffset, value: name } = decodeString(buffer, offset);
   const { offset: modifierOffset, value: modifier } = decodeStorageModifier(buffer, nameOffset);
@@ -175,11 +173,15 @@ function decodeStorageEntry(buffer, offset) {
   return { offset: docOffset, value: entry };
 }
 
+// https://crates.parity.io/frame_metadata/enum.StorageEntryModifier.html
+// https://www.substrate.io/kb/advanced/codec#enumerations-tagged-unions
 function decodeStorageModifier(buffer, offset) {
   const idx = buffer.readUInt8(offset);
   return { offset: offset + 1, value: idx ? "Default" : "Optional" };
 }
 
+// https://crates.parity.io/frame_metadata/enum.StorageEntryType.html
+// https://www.substrate.io/kb/advanced/codec#enumerations-tagged-unions
 function decodeStorageType(buffer, offset) {
   const idx = buffer.readUInt8(offset);
   if (!idx) {
@@ -216,6 +218,8 @@ function decodeStorageType(buffer, offset) {
   return { offset: key2HasherOffset, value: { DoubleMap } };
 }
 
+// https://crates.parity.io/frame_metadata/enum.StorageHasher.html
+// https://www.substrate.io/kb/advanced/codec#enumerations-tagged-unions
 function decodeStorageHasher(buffer, offset) {
   const hashers = ["Blake2_128", "Blake2_256", "Blake2_128Concat", "Twox128", "Twox256", "Twox64Concat", "Identity"];
 
@@ -227,6 +231,7 @@ function decodeCalls(buffer, offset) {
   return decodeArray(buffer, offset, decodeCall);
 }
 
+// https://crates.parity.io/frame_metadata/struct.FunctionMetadata.html
 function decodeCall(buffer, offset) {
   const { offset: nameOffset, value: name } = decodeString(buffer, offset);
   const { offset: argsOffset, value: arguments } = decodeCallArgs(buffer, nameOffset);
@@ -244,6 +249,7 @@ function decodeCallArgs(buffer, offset) {
   return decodeArray(buffer, offset, decodeCallArg);
 }
 
+// https://crates.parity.io/frame_metadata/struct.FunctionArgumentMetadata.html
 function decodeCallArg(buffer, offset) {
   const { offset: nameOffset, value: name } = decodeString(buffer, offset);
   const { offset: typeOffset, value: ty } = decodeString(buffer, nameOffset);
@@ -259,6 +265,7 @@ function decodeEvents(buffer, offset) {
   return decodeArray(buffer, offset, decodeEvent);
 }
 
+// https://crates.parity.io/frame_metadata/struct.EventMetadata.html
 function decodeEvent(buffer, offset) {
   const { offset: nameOffset, value: name } = decodeString(buffer, offset);
   const { offset: argsOffset, value: arguments } = decodeStringArray(buffer, nameOffset);
