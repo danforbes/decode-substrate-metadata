@@ -15,7 +15,7 @@ const WebSocket = require("ws");
     throw new Error(`Metadata version should be v11, found ${version}.`);
   }
 
-  const { offset: modulesOffset, value: modules } = decodeModules(rawMetadata, 5);
+  const { offset: modulesOffset, value: modules } = decodeArray(rawMetadata, 5, decodeModule);
   // TODO: decode extrinsics
   const parsedMetadata = {
     magic,
@@ -120,40 +120,31 @@ function decodeOption(buffer, offset, decodeOpt) {
   return decodeOpt(buffer, offset + 1);
 }
 
-function decodeModules(buffer, offset) {
-  const { offset: numModulesOffset, value: numModules } = decodeCompact(buffer, offset);
-  const { offset: moduleOffset, value: module } = decodeModule(buffer, numModulesOffset);
-  return { offset: moduleOffset, value: [module] };
-}
-
 // https://crates.parity.io/frame_metadata/struct.ModuleMetadata.html
 function decodeModule(buffer, offset) {
   const { offset: nameOffset, value: name } = decodeString(buffer, offset);
   const { offset: storageOffset, value: storage } = decodeOption(buffer, nameOffset, decodeStorage);
   const { offset: callsOffset, value: calls } = decodeOption(buffer, storageOffset, decodeCalls);
   const { offset: eventsOffset, value: events } = decodeOption(buffer, callsOffset, decodeEvents);
-  const { offset: constsOffset, value: constants } = decodeConstants(buffer, eventsOffset);
-  // TODO: errors
+  const { offset: constsOffset, value: constants } = decodeArray(buffer, eventsOffset, decodeConstant);
+  const { offset: errorsOffset, value: errors } = decodeArray(buffer, constsOffset, decodeError);
   const module = {
     name,
     storage,
     calls,
     events,
     constants,
+    errors,
   };
 
-  return { offset: constsOffset, value: module };
+  return { offset: errorsOffset, value: module };
 }
 
 // https://crates.parity.io/frame_metadata/struct.StorageMetadata.html
 function decodeStorage(buffer, offset) {
   const { offset: prefixOffset, value: prefix } = decodeString(buffer, offset);
-  const { offset: entriesOffset, value: entries } = decodeStorageEntries(buffer, prefixOffset);
+  const { offset: entriesOffset, value: entries } = decodeArray(buffer, prefixOffset, decodeStorageEntry);
   return { offset: entriesOffset, value: { prefix, entries } };
-}
-
-function decodeStorageEntries(buffer, offset) {
-  return decodeArray(buffer, offset, decodeStorageEntry);
 }
 
 // https://crates.parity.io/frame_metadata/struct.StorageEntryMetadata.html
@@ -235,7 +226,7 @@ function decodeCalls(buffer, offset) {
 // https://crates.parity.io/frame_metadata/struct.FunctionMetadata.html
 function decodeCall(buffer, offset) {
   const { offset: nameOffset, value: name } = decodeString(buffer, offset);
-  const { offset: argsOffset, value: arguments } = decodeCallArgs(buffer, nameOffset);
+  const { offset: argsOffset, value: arguments } = decodeArray(buffer, nameOffset, decodeCallArg);
   const { offset: docOffset, value: documentation } = decodeStringArray(buffer, argsOffset);
   const call = {
     name,
@@ -244,10 +235,6 @@ function decodeCall(buffer, offset) {
   };
 
   return { offset: docOffset, value: call };
-}
-
-function decodeCallArgs(buffer, offset) {
-  return decodeArray(buffer, offset, decodeCallArg);
 }
 
 // https://crates.parity.io/frame_metadata/struct.FunctionArgumentMetadata.html
@@ -280,10 +267,6 @@ function decodeEvent(buffer, offset) {
   return { offset: docOffset, value: event };
 }
 
-function decodeConstants(buffer, offset) {
-  return decodeArray(buffer, offset, decodeConstant);
-}
-
 // https://crates.parity.io/frame_metadata/struct.ModuleConstantMetadata.html
 function decodeConstant(buffer, offset) {
   const { offset: nameOffset, value: name } = decodeString(buffer, offset);
@@ -298,4 +281,16 @@ function decodeConstant(buffer, offset) {
   };
 
   return { offset: docOffset, value: constant };
+}
+
+// https://crates.parity.io/frame_metadata/struct.ErrorMetadata.html
+function decodeError(buffer, offset) {
+  const { offset: nameOffset, value: name } = decodeString(buffer, offset);
+  const { offset: docOffset, value: documentation } = decodeStringArray(buffer, nameOffset);
+  const error = {
+    name,
+    documentation,
+  };
+
+  return { offset: docOffset, value: error };
 }
