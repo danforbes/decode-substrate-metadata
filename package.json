@@ -1,0 +1,16 @@
+{
+  "name": "substrate-js",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "node ./index.js",
+    "prettier": "./node_modules/.bin/prettier --write ."
+  },
+  "dependencies": {
+    "ws": "^7.3.0"
+  },
+  "devDependencies": {
+    "prettier": "^2.0.5"
+  }
+}
