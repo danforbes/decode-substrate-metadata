@@ -15,7 +15,7 @@ const WebSocket = require("ws");
     throw new Error(`Metadata version should be v11, found ${version}.`);
   }
 
-  const modules = decodeModules(rawMetadata, 5);
+  const { offset: modulesOffset, value: modules } = decodeModules(rawMetadata, 5);
   // TODO: decode extrinsics
   const parsedMetadata = {
     magic,
@@ -90,9 +90,9 @@ function decodeByteArray(buffer, offset) {
 
 function decodeStringArray(buffer, offset) {
   const { offset: numStrOffset, value: numStr } = decodeCompact(buffer, offset);
+  let strOffset = numStrOffset;
   const strs = [];
 
-  let strOffset = numStrOffset;
   for (let idx = 0; idx < numStr; ++idx) {
     const { offset, value: str } = decodeString(buffer, strOffset);
     strOffset = offset;
@@ -104,20 +104,24 @@ function decodeStringArray(buffer, offset) {
 
 function decodeModules(buffer, offset) {
   const { offset: numModulesOffset, value: numModules } = decodeCompact(buffer, offset);
-  return [decodeModule(buffer, numModulesOffset)];
+  const { offset: moduleOffset, value: module } = decodeModule(buffer, numModulesOffset);
+  return { offset: moduleOffset, value: [module] };
 }
 
 function decodeModule(buffer, offset) {
-  const { offset: modNameOffset, value: modName } = decodeString(buffer, offset);
-  const { offset: modStorageOffset, value: modStorage } = decodeStorage(buffer, modNameOffset);
-  // TODO: calls
+  const { offset: nameOffset, value: name } = decodeString(buffer, offset);
+  const { offset: storageOffset, value: storage } = decodeStorage(buffer, nameOffset);
+  const { offset: callsOffset, value: calls } = decodeCalls(buffer, storageOffset);
   // TODO: events
   // TODO: constants
   // TODO: errors
-  return {
-    name: modName,
-    storage: modStorage,
+  const module = {
+    name,
+    storage,
+    calls,
   };
+
+  return { offset: callsOffset, value: module };
 }
 
 function decodeStorage(buffer, offset) {
@@ -133,9 +137,9 @@ function decodeStorage(buffer, offset) {
 
 function decodeStorageEntries(buffer, offset) {
   const { offset: numEntriesOffset, value: numEntries } = decodeCompact(buffer, offset);
+  let entryOffset = numEntriesOffset;
   const entries = [];
 
-  let entryOffset = numEntriesOffset;
   for (let idx = 0; idx < numEntries; ++idx) {
     const { offset, value: entry } = decodeStorageEntry(buffer, entryOffset);
     entryOffset = offset;
@@ -163,8 +167,8 @@ function decodeStorageEntry(buffer, offset) {
 }
 
 function decodeStorageModifier(buffer, offset) {
-  const ndx = buffer.readUInt8(offset);
-  return { offset: offset + 1, value: ndx ? "Default" : "Optional" };
+  const idx = buffer.readUInt8(offset);
+  return { offset: offset + 1, value: idx ? "Default" : "Optional" };
 }
 
 function decodeStorageType(buffer, offset) {
@@ -208,4 +212,61 @@ function decodeStorageHasher(buffer, offset) {
 
   const idx = buffer.readUInt8(offset);
   return { offset: offset + 1, value: hashers[idx] };
+}
+
+function decodeCalls(buffer, offset) {
+  const opt = buffer.readUInt8(offset);
+  if (!opt) {
+    return { offset: offset + 1, value: null };
+  }
+
+  const { offset: numCallsOffset, value: numCalls } = decodeCompact(buffer, offset + 1);
+  let callOffset = numCallsOffset;
+  const calls = [];
+
+  for (let idx = 0; idx < numCalls; ++idx) {
+    const { offset, value: call } = decodeCall(buffer, callOffset);
+    callOffset = offset;
+    calls.push(call);
+  }
+
+  return { offset: callOffset, value: calls };
+}
+
+function decodeCall(buffer, offset) {
+  const { offset: nameOffset, value: name } = decodeString(buffer, offset);
+  const { offset: argsOffset, value: arguments } = decodeCallArgs(buffer, nameOffset);
+  const { offset: docOffset, value: documentation } = decodeStringArray(buffer, argsOffset);
+  const call = {
+    name,
+    arguments,
+    documentation,
+  };
+
+  return { offset: docOffset, value: call };
+}
+
+function decodeCallArgs(buffer, offset) {
+  const { offset: numArgsOffset, value: numArgs } = decodeCompact(buffer, offset);
+  let argOffset = numArgsOffset;
+  const args = [];
+
+  for (let idx = 0; idx < numArgs; ++idx) {
+    const { offset, value: arg } = decodeCallArg(buffer, argOffset);
+    argOffset = offset;
+    args.push(arg);
+  }
+
+  return { offset: argOffset, value: args };
+}
+
+function decodeCallArg(buffer, offset) {
+  const { offset: nameOffset, value: name } = decodeString(buffer, offset);
+  const { offset: typeOffset, value: ty } = decodeString(buffer, nameOffset);
+  const arg = {
+    name,
+    ty,
+  };
+
+  return { offset: typeOffset, value: arg };
 }
