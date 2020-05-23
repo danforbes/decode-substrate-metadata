@@ -88,18 +88,31 @@ function decodeByteArray(buffer, offset) {
   return { offset: arrEnd, value: buffer.slice(numBytesOffset, arrEnd) };
 }
 
-function decodeStringArray(buffer, offset) {
-  const { offset: numStrOffset, value: numStr } = decodeCompact(buffer, offset);
-  let strOffset = numStrOffset;
-  const strs = [];
+function decodeArray(buffer, offset, decodeElem) {
+  const { offset: numElemOffset, value: numElems } = decodeCompact(buffer, offset);
+  let elemOffset = numElemOffset;
+  const elems = [];
 
-  for (let idx = 0; idx < numStr; ++idx) {
-    const { offset, value: str } = decodeString(buffer, strOffset);
-    strOffset = offset;
-    strs.push(str);
+  for (let idx = 0; idx < numElems; ++idx) {
+    const { offset, value: elem } = decodeElem(buffer, elemOffset);
+    elemOffset = offset;
+    elems.push(elem);
   }
 
-  return { offset: strOffset, value: strs };
+  return { offset: elemOffset, value: elems };
+}
+
+function decodeStringArray(buffer, offset) {
+  return decodeArray(buffer, offset, decodeString);
+}
+
+function decodeOption(buffer, offset, decodeOpt) {
+  const opt = buffer.readUInt8(offset);
+  if (!opt) {
+    return { offset: offset + 1, value: null };
+  }
+
+  return decodeOpt(buffer, offset + 1);
 }
 
 function decodeModules(buffer, offset) {
@@ -110,27 +123,23 @@ function decodeModules(buffer, offset) {
 
 function decodeModule(buffer, offset) {
   const { offset: nameOffset, value: name } = decodeString(buffer, offset);
-  const { offset: storageOffset, value: storage } = decodeStorage(buffer, nameOffset);
-  const { offset: callsOffset, value: calls } = decodeCalls(buffer, storageOffset);
-  // TODO: events
+  const { offset: storageOffset, value: storage } = decodeOption(buffer, nameOffset, decodeStorage);
+  const { offset: callsOffset, value: calls } = decodeOption(buffer, storageOffset, decodeCalls);
+  const { offset: eventsOffset, value: events } = decodeOption(buffer, callsOffset, decodeEvents);
   // TODO: constants
   // TODO: errors
   const module = {
     name,
     storage,
     calls,
+    events,
   };
 
-  return { offset: callsOffset, value: module };
+  return { offset: eventsOffset, value: module };
 }
 
 function decodeStorage(buffer, offset) {
-  const opt = buffer.readUInt8(offset);
-  if (!opt) {
-    return { offset: offset + 1, value: null };
-  }
-
-  const { offset: prefixOffset, value: prefix } = decodeString(buffer, offset + 1);
+  const { offset: prefixOffset, value: prefix } = decodeString(buffer, offset);
   const { offset: entriesOffset, value: entries } = decodeStorageEntries(buffer, prefixOffset);
   return { offset: entriesOffset, value: { prefix, entries } };
 }
@@ -215,22 +224,7 @@ function decodeStorageHasher(buffer, offset) {
 }
 
 function decodeCalls(buffer, offset) {
-  const opt = buffer.readUInt8(offset);
-  if (!opt) {
-    return { offset: offset + 1, value: null };
-  }
-
-  const { offset: numCallsOffset, value: numCalls } = decodeCompact(buffer, offset + 1);
-  let callOffset = numCallsOffset;
-  const calls = [];
-
-  for (let idx = 0; idx < numCalls; ++idx) {
-    const { offset, value: call } = decodeCall(buffer, callOffset);
-    callOffset = offset;
-    calls.push(call);
-  }
-
-  return { offset: callOffset, value: calls };
+  return decodeArray(buffer, offset, decodeCall);
 }
 
 function decodeCall(buffer, offset) {
@@ -247,17 +241,7 @@ function decodeCall(buffer, offset) {
 }
 
 function decodeCallArgs(buffer, offset) {
-  const { offset: numArgsOffset, value: numArgs } = decodeCompact(buffer, offset);
-  let argOffset = numArgsOffset;
-  const args = [];
-
-  for (let idx = 0; idx < numArgs; ++idx) {
-    const { offset, value: arg } = decodeCallArg(buffer, argOffset);
-    argOffset = offset;
-    args.push(arg);
-  }
-
-  return { offset: argOffset, value: args };
+  return decodeArray(buffer, offset, decodeCallArg);
 }
 
 function decodeCallArg(buffer, offset) {
@@ -269,4 +253,21 @@ function decodeCallArg(buffer, offset) {
   };
 
   return { offset: typeOffset, value: arg };
+}
+
+function decodeEvents(buffer, offset) {
+  return decodeArray(buffer, offset, decodeEvent);
+}
+
+function decodeEvent(buffer, offset) {
+  const { offset: nameOffset, value: name } = decodeString(buffer, offset);
+  const { offset: argsOffset, value: arguments } = decodeStringArray(buffer, nameOffset);
+  const { offset: docOffset, value: documentation } = decodeStringArray(buffer, argsOffset);
+  const event = {
+    name,
+    arguments,
+    documentation,
+  };
+
+  return { offset: docOffset, value: event };
 }
