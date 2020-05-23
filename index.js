@@ -4,27 +4,29 @@ const path = require("path");
 const WebSocket = require("ws");
 
 (async () => {
-  const rawMetadata = await getMetadata();
-  const magic = rawMetadata.toString("utf-8", 0, 4);
+  const buffer = await getMetadata();
+  fs.writeFileSync(path.join(__dirname, "metadata.scale"), `0x${buffer.toString("hex")}`);
+
+  const magic = buffer.toString("utf-8", 0, 4);
   if (magic !== "meta") {
-    throw new Error(`First four bytes of metadata should be 0x6d657461, found 0x${rawMetadata.toString("hex", 0, 4)}.`);
+    throw new Error(`First four bytes of metadata should be 0x6d657461, found 0x${buffer.toString("hex", 0, 4)}.`);
   }
 
-  const version = `v${rawMetadata.readUInt8(4)}`;
+  const version = `v${buffer.readUInt8(4)}`;
   if (version !== `v11`) {
     throw new Error(`Metadata version should be v11, found ${version}.`);
   }
 
-  const { offset: modulesOffset, value: modules } = decodeArray(rawMetadata, 5, decodeModule);
-  // TODO: decode extrinsics
+  const { offset: modulesOffset, value: modules } = decodeArray(buffer, 5, decodeModule);
+  const { value: extrinsic } = decodeExtrinsic(buffer, modulesOffset);
   const parsedMetadata = {
     magic,
     version,
     modules,
+    extrinsic,
   };
 
   fs.writeFileSync(path.join(__dirname, "metadata.json"), JSON.stringify(parsedMetadata, null, 2));
-  fs.writeFileSync(path.join(__dirname, "metadata.scale"), `0x${rawMetadata.toString("hex")}`);
 })();
 
 function getRpc() {
@@ -293,4 +295,16 @@ function decodeError(buffer, offset) {
   };
 
   return { offset: docOffset, value: error };
+}
+
+// https://crates.parity.io/frame_metadata/struct.ExtrinsicMetadata.html
+function decodeExtrinsic(buffer, offset) {
+  const version = buffer.readUInt8(offset);
+  const { offset: signedExtensionsOffset, value: signed_extenisons } = decodeStringArray(buffer, offset + 1);
+  const extrinsic = {
+    version,
+    signed_extenisons,
+  };
+
+  return { offset: signedExtensionsOffset, value: extrinsic };
 }
