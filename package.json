@@ -8,7 +8,7 @@
     "prettier": "./node_modules/.bin/prettier --write ."
   },
   "dependencies": {
-    "ws": "^7.3.0"
+    "ws": "^7.4.6"
   },
   "devDependencies": {
     "prettier": "^2.0.5"
